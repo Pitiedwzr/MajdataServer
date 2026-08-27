@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import uuid
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Integer, Text
+from pathlib import Path
 from sqlalchemy.orm import relationship
 from app.database import Base
 
