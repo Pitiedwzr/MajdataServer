@@ -490,7 +490,7 @@ async def get_favorite_collections(
     ]
 
 
-@router.get("/favorite/collection/diff")
+@router.post("/favorite/collection/diff")
 async def get_favorite_collection_diff(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
