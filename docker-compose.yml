@@ -1,0 +1,22 @@
+services:
+  majdata-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: majdata-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - CHARTS_DIR=/app/charts
+      - DATA_DIR=/app/data
+      - AUTO_ACTIVATE_USERS=true
+      - SECRET_KEY=majdata-super-secret-key-change-in-production
+    volumes:
+      - ./data:/app/data
+      - ../MajdataProvider/charts:/app/charts:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/utils/Ping')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
