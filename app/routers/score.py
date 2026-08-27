@@ -1,8 +1,10 @@
+import uuid
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.models.chart import Chart
 from app.models.score import Score
@@ -14,13 +16,18 @@ router = APIRouter(prefix="/maichart", tags=["Score"])
 
 @router.get("/{chartId}/score")
 async def get_chart_scores(
-    chartId: str,
-    db: AsyncSession = Depends(get_db)
+        chartId: str,
+        db: AsyncSession = Depends(get_db)
 ):
     """
     Get leaderboard scores for each difficulty level of a chart.
     Matches frontend ChartScoresResponse shape.
     """
+    # INTERCEPT CLIENT BUG: If client sends literal "{0}", return empty leaderboard
+    # since we don't have the hash in a GET request body to look it up.
+    if chartId in ("{0}", "%7B0%7D"):
+        return {"levels": [], "scores": []}
+
     stmt_chart = select(Chart).where(Chart.id == chartId)
     res_chart = await db.execute(stmt_chart)
     chart = res_chart.scalar_one_or_none()
@@ -63,19 +70,26 @@ async def get_chart_scores(
 
 @router.post("/{chartId}/score")
 async def submit_chart_score(
-    chartId: str,
-    req: ScoreSubmitRequest = Body(...),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+        chartId: str,
+        req: ScoreSubmitRequest = Body(...),
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
 ):
     """Submit a gameplay score for a chart."""
     stmt_chart = select(Chart).where(Chart.hash == req.hash)
     res_chart = await db.execute(stmt_chart)
     chart = res_chart.scalar_one_or_none()
 
+    # INTERCEPT CLIENT BUG: Use a valid UUID to prevent DB crash.
+    # If we found the chart via the hash, use its real ID.
+    # If the chart doesn't exist, generate a placeholder UUID.
+    valid_chart_id = chartId
+    if chartId in ("{0}", "%7B0%7D"):
+        valid_chart_id = chart.id if chart else str(uuid.uuid4())
+
     score = Score(
         user_id=current_user.id,
-        chart_id=chart.id if chart else chartId,
+        chart_id=chart.id if chart else valid_chart_id,
         chart_hash=req.hash,
         chart_level=req.chartLevel,
         dx_score=req.dxScore,
@@ -85,5 +99,16 @@ async def submit_chart_score(
         timestamp=datetime.now(timezone.utc),
     )
     db.add(score)
-    await db.commit()
+
+    # Catch DB errors (like missing Foreign Keys if the chart doesn't exist)
+    # Return a safe code instead of a 500 error to prevent the client from hanging.
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        return {"code": 400, "message": "Failed to submit score: Chart not found"}
+    except Exception:
+        await db.rollback()
+        return {"code": 500, "message": "Server error during submission"}
+
     return {"code": 114514, "message": "Score submitted successfully"}
