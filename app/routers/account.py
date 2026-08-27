@@ -3,6 +3,7 @@ import uuid
 import mimetypes
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Form, File, UploadFile, Query, Response, Request
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
