@@ -192,7 +192,7 @@ async def modify_collection(
     return {"code": 114514, "message": "Collection modified"}
 
 
-@router.get("/{idStr}/diff")
+@router.post("/{idStr}/diff")
 async def get_collection_diff(
     idStr: str,
     db: AsyncSession = Depends(get_db)
