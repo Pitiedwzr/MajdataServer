@@ -466,8 +466,8 @@ async def reset_password(
 
 @router.get("/favorite/collection/list")
 async def get_favorite_collections(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db)
 ):
     stmt = (
         select(Collection)
@@ -477,12 +477,20 @@ async def get_favorite_collections(
     )
     res = await db.execute(stmt)
     collections = res.scalars().all()
+
     return [
         {
             "id": c.id,
             "name": c.name,
             "createdBy": c.user.username if c.user else "",
-            "description": c.description,
+            "description": c.description or "",
+            "songHashs": [
+                item.chart_hash
+                for item in sorted(c.items, key=lambda x: x.order_idx or 0)
+            ],
+            "isPlayList": True,
+            "isForceGameover": False,
+            # Kept for Web UI compatibility
             "count": len(c.items),
             "visibility": c.visibility,
         }
