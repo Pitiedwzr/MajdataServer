@@ -8,7 +8,7 @@ class AccDetail(BaseModel):
 
 class ScoreSubmitRequest(BaseModel):
     chartLevel: int = 0
-    hash: str
+    hash: Optional[str] = None
     dxScore: int = 0
     comboState: int = 0
     acc: AccDetail
