@@ -4,7 +4,7 @@ import mimetypes
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, Form, File, UploadFile, Query, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, Form, File, UploadFile, Query, Response, Request, Body
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, desc
@@ -491,8 +491,38 @@ async def get_favorite_collections(
 
 
 @router.post("/favorite/collection/diff")
-async def get_favorite_collection_diff(
+async def add_favorite_collection(
+    collection_ids: List[str] = Body(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    return {"diff": []}
+    for cid in collection_ids:
+        stmt = select(CollectionFavorite).where(
+            CollectionFavorite.user_id == current_user.id,
+            CollectionFavorite.collection_id == cid
+        )
+        exists = (await db.execute(stmt)).scalar_one_or_none()
+        
+        if not exists:
+            new_fav = CollectionFavorite(user_id=current_user.id, collection_id=cid)
+            db.add(new_fav)
+            
+    await db.commit()
+    return {"message": "Subscribed successfully"}
+
+@router.delete("/favorite/collection/diff")
+async def remove_favorite_collection(
+    collection_ids: List[str] = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if not collection_ids:
+        return {"message": "No IDs provided"}
+
+    stmt = delete(CollectionFavorite).where(
+        CollectionFavorite.user_id == current_user.id,
+        CollectionFavorite.collection_id.in_(collection_ids)
+    )
+    await db.execute(stmt)
+    await db.commit()
+    return {"message": "Unsubscribed successfully"}
