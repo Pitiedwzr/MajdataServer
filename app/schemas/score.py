@@ -1,17 +1,17 @@
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class AccDetail(BaseModel):
-    dx: float = 0.0
-    classic: float = 0.0
+    dx: float = Field(default=0.0, alias="DX")
+    classic: float = Field(default=0.0, alias="Classic")
 
 class ScoreSubmitRequest(BaseModel):
-    chartLevel: int = 0
-    hash: Optional[str] = None
-    dxScore: int = 0
-    comboState: int = 0
-    acc: AccDetail
+    chartLevel: int = Field(default=0, alias="ChartLevel")
+    hash: Optional[str] = Field(default=None, alias="Hash")
+    dxScore: int = Field(default=0, alias="DXScore")
+    comboState: int = Field(default=0, alias="ComboState")
+    acc: AccDetail = Field(alias="Acc")
 
 class PlayerInfo(BaseModel):
     username: str

@@ -58,7 +58,6 @@ async def get_chart_scores(
         "scores": scores_by_level
     }
 
-'''
 @router.post("/{chartId}/score")
 async def submit_chart_score(
         chartId: str,
@@ -104,13 +103,13 @@ async def submit_chart_score(
         await db.rollback()
         return {"code": 500, "message": "Server error during submission"}
 
-    return {"code": 114514, "message": "Score submitted successfully"}'''
+    return {"code": 114514, "message": "Score submitted successfully"}
 
-# Debug
+'''
 @router.post("/{chartId}/score")
 async def submit_chart_score(
         chartId: str,
         req: dict = Body(...), # Accepts any JSON payload
 ):
     print("INCOMING SCORE DATA:", req)
-    return {"code": 114514, "message": "Inspecting data"}
+    return {"code": 114514, "message": "Inspecting data"}'''
