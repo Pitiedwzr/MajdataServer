@@ -2,6 +2,7 @@ import mimetypes
 import zipfile
 import io
 import shutil
+import uuid
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime, timezone
@@ -80,9 +81,14 @@ async def get_chart_list(
     result = await db.execute(stmt)
     charts = result.scalars().all()
 
-    return [
-        {
-            "id": c.id,
+    # Generate deterministic UUIDs from the original string IDs
+    response_list = []
+    for c in charts:
+        # Create a consistent UUID based on the string ID
+        safe_uuid = str(uuid.uuid5(uuid.NAMESPACE_OID, str(c.id)))
+
+        response_list.append({
+            "id": safe_uuid,  # Send the valid UUID to the client
             "title": c.title,
             "artist": c.artist,
             "designer": c.designer,
@@ -93,9 +99,9 @@ async def get_chart_list(
             "publicTags": c.public_tags,
             "timestamp": c.timestamp.isoformat() if c.timestamp else "",
             "hash": c.hash,
-        }
-        for c in charts
-    ]
+        })
+
+    return response_list
 
 
 @router.get("/{chartId}/summary")

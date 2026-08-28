@@ -76,20 +76,21 @@ async def submit_chart_score(
         db: AsyncSession = Depends(get_db)
 ):
     """Submit a gameplay score for a chart."""
+    # Find the chart using the hash provided in the body
     stmt_chart = select(Chart).where(Chart.hash == req.hash)
     res_chart = await db.execute(stmt_chart)
     chart = res_chart.scalar_one_or_none()
 
-    # INTERCEPT CLIENT BUG: Use a valid UUID to prevent DB crash.
-    # If we found the chart via the hash, use its real ID.
-    # If the chart doesn't exist, generate a placeholder UUID.
     valid_chart_id = chartId
     if chartId in ("{0}", "%7B0%7D"):
         valid_chart_id = chart.id if chart else str(uuid.uuid4())
+    else:
+        # Use the actual string ID from the database, not the hashed UUID from the client
+        valid_chart_id = chart.id if chart else chartId
 
     score = Score(
         user_id=current_user.id,
-        chart_id=chart.id if chart else valid_chart_id,
+        chart_id=valid_chart_id,  # Will store the original 'T3V0...' format if chart is found
         chart_hash=req.hash,
         chart_level=req.chartLevel,
         dx_score=req.dxScore,
@@ -100,13 +101,8 @@ async def submit_chart_score(
     )
     db.add(score)
 
-    # Catch DB errors (like missing Foreign Keys if the chart doesn't exist)
-    # Return a safe code instead of a 500 error to prevent the client from hanging.
     try:
         await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        return {"code": 400, "message": "Failed to submit score: Chart not found"}
     except Exception:
         await db.rollback()
         return {"code": 500, "message": "Server error during submission"}

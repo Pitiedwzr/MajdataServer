@@ -321,7 +321,7 @@ async def get_recent_activity(
 
     recent_list = []
     for score, chart in records:
-        chart_id = chart.id if chart else ""
+        chart_id = str(uuid.uuid5(uuid.NAMESPACE_OID, str(chart.id))) if chart else "00000000-0000-0000-0000-000000000000"
         title = chart.title if chart else "Unknown"
         artist = chart.artist if chart else ""
         uploader = chart.uploader if chart else ""
@@ -361,7 +361,7 @@ async def get_user_scores(
     score_list = []
     for score, chart in records:
         chart_info = {
-            "id": chart.id if chart else "",
+            "id": str(uuid.uuid5(uuid.NAMESPACE_OID, str(chart.id))) if chart else "00000000-0000-0000-0000-000000000000",
             "title": chart.title if chart else "",
             "artist": chart.artist if chart else "",
             "designer": chart.designer if chart else "",
