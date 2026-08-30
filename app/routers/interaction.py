@@ -8,8 +8,18 @@ from app.models.chart import Chart
 from app.models.user import User
 from app.models.interaction import ChartLike, ChartComment, ChartPlay
 from app.services.auth import get_current_user, get_current_user_optional
+from app.routers.maichart import get_real_chart_id
 
 router = APIRouter(prefix="/maichart", tags=["Interaction"])
+
+
+async def resolve_chart_id(chart_id: str, db: AsyncSession) -> str:
+    """Resolve public UUID chart IDs and reject IDs that do not identify a chart."""
+    real_id = await get_real_chart_id(chart_id, db)
+    chart = await db.scalar(select(Chart.id).where(Chart.id == real_id))
+    if chart is None:
+        raise HTTPException(status_code=404, detail="Chart not found")
+    return real_id
 
 @router.get("/{chartId}/interact")
 async def get_chart_interactions(
@@ -17,17 +27,18 @@ async def get_chart_interactions(
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
+    chart_id = await resolve_chart_id(chartId, db)
     # Likes
     stmt_likes = (
         select(User.username)
         .join(ChartLike, ChartLike.user_id == User.id)
-        .where(ChartLike.chart_id == chartId, ChartLike.is_dislike == False)
+        .where(ChartLike.chart_id == chart_id, ChartLike.is_dislike == False)
     )
     res_likes = await db.execute(stmt_likes)
     like_usernames = list(res_likes.scalars().all())
 
     # Dislikes count
-    stmt_dislikes = select(func.count()).select_from(ChartLike).where(ChartLike.chart_id == chartId, ChartLike.is_dislike == True)
+    stmt_dislikes = select(func.count()).select_from(ChartLike).where(ChartLike.chart_id == chart_id, ChartLike.is_dislike == True)
     res_dislikes = await db.execute(stmt_dislikes)
     dislike_count = res_dislikes.scalar() or 0
 
@@ -35,7 +46,7 @@ async def get_chart_interactions(
     is_liked = False
     is_disliked = False
     if current_user:
-        stmt_user_like = select(ChartLike).where(ChartLike.chart_id == chartId, ChartLike.user_id == current_user.id)
+        stmt_user_like = select(ChartLike).where(ChartLike.chart_id == chart_id, ChartLike.user_id == current_user.id)
         res_user_like = await db.execute(stmt_user_like)
         user_like = res_user_like.scalar_one_or_none()
         if user_like:
@@ -43,7 +54,7 @@ async def get_chart_interactions(
             is_disliked = user_like.is_dislike
 
     # Plays
-    stmt_plays = select(ChartPlay).where(ChartPlay.chart_id == chartId)
+    stmt_plays = select(ChartPlay).where(ChartPlay.chart_id == chart_id)
     res_plays = await db.execute(stmt_plays)
     play_rec = res_plays.scalar_one_or_none()
     plays = play_rec.play_count if play_rec else 0
@@ -52,7 +63,7 @@ async def get_chart_interactions(
     stmt_comments = (
         select(ChartComment, User.username)
         .join(User, ChartComment.user_id == User.id)
-        .where(ChartComment.chart_id == chartId)
+        .where(ChartComment.chart_id == chart_id)
         .order_by(ChartComment.created_at)
     )
     res_comments = await db.execute(stmt_comments)
@@ -99,8 +110,9 @@ async def create_interaction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    chart_id = await resolve_chart_id(chartId, db)
     if type == "like":
-        stmt = select(ChartLike).where(ChartLike.chart_id == chartId, ChartLike.user_id == current_user.id)
+        stmt = select(ChartLike).where(ChartLike.chart_id == chart_id, ChartLike.user_id == current_user.id)
         res = await db.execute(stmt)
         existing = res.scalar_one_or_none()
         if existing:
@@ -109,12 +121,12 @@ async def create_interaction(
             else:
                 await db.delete(existing)
         else:
-            db.add(ChartLike(chart_id=chartId, user_id=current_user.id, is_dislike=False))
+            db.add(ChartLike(chart_id=chart_id, user_id=current_user.id, is_dislike=False))
         await db.commit()
         return {"code": 114514, "message": "Like updated"}
 
     elif type == "dislike":
-        stmt = select(ChartLike).where(ChartLike.chart_id == chartId, ChartLike.user_id == current_user.id)
+        stmt = select(ChartLike).where(ChartLike.chart_id == chart_id, ChartLike.user_id == current_user.id)
         res = await db.execute(stmt)
         existing = res.scalar_one_or_none()
         if existing:
@@ -123,15 +135,24 @@ async def create_interaction(
             else:
                 await db.delete(existing)
         else:
-            db.add(ChartLike(chart_id=chartId, user_id=current_user.id, is_dislike=True))
+            db.add(ChartLike(chart_id=chart_id, user_id=current_user.id, is_dislike=True))
         await db.commit()
         return {"code": 114514, "message": "Dislike updated"}
 
     elif type == "comment":
         if not content or not content.strip():
             raise HTTPException(status_code=400, detail="Empty comment")
+        if replyTo:
+            parent = await db.scalar(
+                select(ChartComment).where(
+                    ChartComment.id == replyTo,
+                    ChartComment.chart_id == chart_id,
+                )
+            )
+            if not parent:
+                raise HTTPException(status_code=404, detail="Reply target not found")
         comment = ChartComment(
-            chart_id=chartId,
+            chart_id=chart_id,
             user_id=current_user.id,
             content=content.strip(),
             reply_to=replyTo if replyTo else None,
@@ -142,13 +163,13 @@ async def create_interaction(
         return {"code": 114514, "message": "Comment posted"}
 
     elif type == "play":
-        stmt = select(ChartPlay).where(ChartPlay.chart_id == chartId)
+        stmt = select(ChartPlay).where(ChartPlay.chart_id == chart_id)
         res = await db.execute(stmt)
         play_rec = res.scalar_one_or_none()
         if play_rec:
             play_rec.play_count += 1
         else:
-            db.add(ChartPlay(chart_id=chartId, play_count=1))
+            db.add(ChartPlay(chart_id=chart_id, play_count=1))
         await db.commit()
         return {"code": 114514, "message": "Play recorded"}
 
@@ -163,11 +184,14 @@ async def delete_interaction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    chart_id = await resolve_chart_id(chartId, db)
     if type == "comment" and commentId:
         stmt = select(ChartComment).where(ChartComment.id == commentId)
         res = await db.execute(stmt)
         comment = res.scalar_one_or_none()
         if not comment:
+            raise HTTPException(status_code=404, detail="Comment not found")
+        if comment.chart_id != chart_id:
             raise HTTPException(status_code=404, detail="Comment not found")
         if comment.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Permission denied")
@@ -183,15 +207,16 @@ async def get_interaction_summary(
     chartId: str,
     db: AsyncSession = Depends(get_db)
 ):
-    stmt_comments = select(func.count()).select_from(ChartComment).where(ChartComment.chart_id == chartId)
+    chart_id = await resolve_chart_id(chartId, db)
+    stmt_comments = select(func.count()).select_from(ChartComment).where(ChartComment.chart_id == chart_id)
     res_comments = await db.execute(stmt_comments)
     comments_count = res_comments.scalar() or 0
 
-    stmt_likes = select(func.count()).select_from(ChartLike).where(ChartLike.chart_id == chartId, ChartLike.is_dislike == False)
+    stmt_likes = select(func.count()).select_from(ChartLike).where(ChartLike.chart_id == chart_id, ChartLike.is_dislike == False)
     res_likes = await db.execute(stmt_likes)
     likes_count = res_likes.scalar() or 0
 
-    stmt_plays = select(ChartPlay).where(ChartPlay.chart_id == chartId)
+    stmt_plays = select(ChartPlay).where(ChartPlay.chart_id == chart_id)
     res_plays = await db.execute(stmt_plays)
     play_rec = res_plays.scalar_one_or_none()
     plays_count = play_rec.play_count if play_rec else 0
