@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
@@ -10,31 +10,6 @@ from app.models.user import User
 from app.services.auth import get_current_user, get_current_user_optional
 
 router = APIRouter(tags=["Machine & Persist"])
-
-GUEST_ID_COOKIE = "persist_guest_id"
-
-
-def get_persist_owner_id(request: Request, response: Response, user: Optional[User]) -> str:
-    """Return a stable per-browser owner ID for unauthenticated persisted data."""
-    if user:
-        return user.id
-
-    guest_id = request.cookies.get(GUEST_ID_COOKIE)
-    try:
-        uuid.UUID(guest_id) if guest_id else None
-    except ValueError:
-        guest_id = None
-    if not guest_id:
-        guest_id = str(uuid.uuid4())
-        response.set_cookie(
-            GUEST_ID_COOKIE,
-            guest_id,
-            httponly=True,
-            samesite="lax",
-            max_age=365 * 86400,
-            path="/",
-        )
-    return guest_id
 
 # ----------------- Machine API -----------------
 
@@ -118,12 +93,10 @@ async def permit_machine_auth(
 async def get_persist_data(
     appId: str,
     category: str,
-    request: Request,
-    response: Response,
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    user_id = get_persist_owner_id(request, response, current_user)
+    user_id = current_user.id if current_user else None
     stmt = select(PersistData).where(
         PersistData.app_id == appId,
         PersistData.category == category,
@@ -138,14 +111,12 @@ async def get_persist_data(
 @router.post("/persist/app/{appId}/{category}")
 async def save_persist_data(
     appId: str,
-    request: Request,
-    response: Response,
     category: str = "settings",
     payload: Dict[str, Any] = Body(...),
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    user_id = get_persist_owner_id(request, response, current_user)
+    user_id = current_user.id if current_user else None
     stmt = select(PersistData).where(
         PersistData.app_id == appId,
         PersistData.category == category,

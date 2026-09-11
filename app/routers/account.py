@@ -150,12 +150,7 @@ async def logout_user(
     db: AsyncSession = Depends(get_db)
 ):
     if sessionId:
-        if not current_user:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        stmt = delete(UserSession).where(
-            UserSession.session_id == sessionId,
-            UserSession.user_id == current_user.id,
-        )
+        stmt = delete(UserSession).where(UserSession.session_id == sessionId)
         await db.execute(stmt)
         await db.commit()
     elif current_user:
@@ -398,7 +393,6 @@ async def verify_otp(
     now = datetime.now(timezone.utc)
     stmt = select(OTPVerification).where(
         OTPVerification.otp == otp,
-        OTPVerification.purpose == "register",
         OTPVerification.is_used == False,
         OTPVerification.expires_at > now
     )
@@ -452,7 +446,6 @@ async def reset_password(
     now = datetime.now(timezone.utc)
     stmt = select(OTPVerification).where(
         OTPVerification.otp == otp,
-        OTPVerification.purpose == "reset_password",
         OTPVerification.is_used == False,
         OTPVerification.expires_at > now
     )

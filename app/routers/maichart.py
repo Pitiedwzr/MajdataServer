@@ -89,7 +89,8 @@ async def get_chart_list(
     else:
         stmt = stmt.order_by(desc(Chart.timestamp))
 
-    stmt = stmt.offset(page * pageSize).limit(pageSize)
+    if page > 0 or pageSize != 100:
+        stmt = stmt.offset(page * pageSize).limit(pageSize)
 
     result = await db.execute(stmt)
     charts = result.scalars().all()
@@ -241,7 +242,7 @@ async def upload_chart(
                 chart_title = parsed["title"] or Path(files[0].filename).stem
 
                 safe_title = "".join(c for c in chart_title if c.isalnum() or c in " -_").strip() or "chart"
-                folder_name = f"{safe_title}_{uuid.uuid4().hex}"
+                folder_name = f"{safe_title}_{int(datetime.now().timestamp())}"
                 target_dir = settings.CHARTS_DIR / folder_name
                 target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -287,7 +288,7 @@ async def upload_chart(
     parsed = parse_maidata(maidata_content)
     chart_title = parsed["title"] or "chart"
     safe_title = "".join(c for c in chart_title if c.isalnum() or c in " -_").strip() or "chart"
-    folder_name = f"{safe_title}_{uuid.uuid4().hex}"
+    folder_name = f"{safe_title}_{int(datetime.now().timestamp())}"
     target_dir = settings.CHARTS_DIR / folder_name
     target_dir.mkdir(parents=True, exist_ok=True)
 

@@ -78,10 +78,6 @@ async def scan_and_sync_charts(db: AsyncSession) -> int:
     if not charts_dir.exists():
         return 0
 
-    existing_charts = {
-        chart.id: chart
-        for chart in (await db.execute(select(Chart))).scalars()
-    }
     count = 0
     # Walk all folders looking for maidata.txt
     for maidata_path in charts_dir.rglob("maidata.txt"):
@@ -100,7 +96,9 @@ async def scan_and_sync_charts(db: AsyncSession) -> int:
             chart_hash = compute_maidata_hash(data)
 
             # Check if chart exists in DB
-            existing = existing_charts.get(chart_id)
+            stmt = select(Chart).where(Chart.id == chart_id)
+            result = await db.execute(stmt)
+            existing = result.scalar_one_or_none()
 
             if existing:
                 existing.folder_path = rel_folder
