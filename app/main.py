@@ -13,6 +13,7 @@ from app.routers import (
     machine_persist_router,
     stats_router,
     utils_router,
+    multiplayer_router,
 )
 
 @contextlib.asynccontextmanager
@@ -57,11 +58,15 @@ api_routers = [
     machine_persist_router,
     stats_router,
     utils_router,
+    multiplayer_router,
 ]
 
 for r in api_routers:
+    # Mount at root (e.g. /maichart/list, /machine/register for direct game client calls)
+    app.include_router(r)
+    # Mount under /api (e.g. /api/maichart/list)
     app.include_router(r, prefix=settings.API_PREFIX)
-    # Also include under /api3/api for direct frontend proxy compatibility
+    # Mount under /api3/api (e.g. /api3/api/maichart/list for Web Frontend proxy)
     app.include_router(r, prefix=settings.API3_PREFIX)
 
 @app.get("/")

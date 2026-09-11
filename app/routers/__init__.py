@@ -6,6 +6,7 @@ from app.routers.interaction import router as interaction_router
 from app.routers.machine_persist import router as machine_persist_router
 from app.routers.stats import router as stats_router
 from app.routers.utils import router as utils_router
+from app.routers.multiplayer import router as multiplayer_router
 
 __all__ = [
     "account_router",
@@ -16,4 +17,5 @@ __all__ = [
     "machine_persist_router",
     "stats_router",
     "utils_router",
+    "multiplayer_router",
 ]
