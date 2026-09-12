@@ -31,6 +31,7 @@ async def test_room_join_and_ticket_flow():
             assert room["songHash"] is None
             assert len(room["members"]) == 1
             assert room["members"][0]["connected"] is False
+            assert room["members"][0]["roundComplete"] is False
 
             join_response = await second_client.post("/api/multiplayer/rooms/join", json={"code": room["code"]})
             assert join_response.status_code == 200

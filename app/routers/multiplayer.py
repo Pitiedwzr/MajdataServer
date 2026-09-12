@@ -37,6 +37,7 @@ class Member:
     difficulty: int = 0
     ready: bool = False
     connected: bool = False
+    round_complete: bool = False
 
     def serialize(self) -> dict[str, Any]:
         return {
@@ -45,6 +46,7 @@ class Member:
             "difficulty": self.difficulty,
             "ready": self.ready,
             "connected": self.connected,
+            "roundComplete": self.round_complete,
         }
 
 
@@ -142,6 +144,7 @@ class MultiplayerHub:
                 if room is not None and user_id in room.members:
                     room.members[user_id].connected = False
                     room.members[user_id].ready = False
+                    room.members[user_id].round_complete = False
 
     async def broadcast(self, room: Room, event: str = "room_snapshot") -> None:
         payload = {"type": event, "serverTimeMs": int(time.time() * 1000), "room": room.serialize()}
@@ -210,18 +213,34 @@ async def multiplayer_socket(websocket: WebSocket, ticket: str, room_id: str):
                     room.start_at_ms = None
                     for member in room.members.values():
                         member.ready = False
+                        member.round_complete = False
                 elif message_type == "set_difficulty":
                     difficulty = message.get("difficulty")
                     if not isinstance(difficulty, int) or difficulty not in range(7):
                         continue
                     room.members[user_id].difficulty = difficulty
                 elif message_type == "set_ready":
-                    room.members[user_id].ready = bool(message.get("ready"))
+                    if room.phase == "lobby":
+                        room.members[user_id].ready = bool(message.get("ready"))
                 elif message_type == "request_start":
-                    if room.song_hash is None or not room.members or not all(member.ready for member in room.members.values()):
+                    active_members = [member for member in room.members.values() if member.connected]
+                    if room.phase != "lobby" or room.song_hash is None or not active_members or not all(member.ready for member in active_members):
                         continue
                     room.phase = "countdown"
                     room.start_at_ms = int(time.time() * 1000) + START_DELAY_MS
+                    for member in room.members.values():
+                        member.round_complete = False
+                elif message_type == "complete_round":
+                    if room.phase != "countdown":
+                        continue
+                    room.members[user_id].round_complete = True
+                    active_members = [member for member in room.members.values() if member.connected]
+                    if active_members and all(member.round_complete for member in active_members):
+                        room.phase = "lobby"
+                        room.start_at_ms = None
+                        for member in room.members.values():
+                            member.ready = False
+                            member.round_complete = False
                 elif message_type == "clock_ping":
                     await websocket.send_json({"type": "clock_pong", "clientTimeMs": message.get("clientTimeMs"), "serverTimeMs": int(time.time() * 1000)})
                     continue
