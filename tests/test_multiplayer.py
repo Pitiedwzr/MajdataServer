@@ -30,10 +30,12 @@ async def test_room_join_and_ticket_flow():
             room = room_response.json()
             assert room["songHash"] is None
             assert len(room["members"]) == 1
+            assert room["members"][0]["connected"] is False
 
             join_response = await second_client.post("/api/multiplayer/rooms/join", json={"code": room["code"]})
             assert join_response.status_code == 200
             assert len(join_response.json()["members"]) == 2
+            assert all(member["connected"] is False for member in join_response.json()["members"])
 
             ticket_response = await second_client.post("/api/multiplayer/rooms/ticket", json={"room_id": room["roomId"]})
             assert ticket_response.status_code == 200

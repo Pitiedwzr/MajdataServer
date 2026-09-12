@@ -36,6 +36,7 @@ class Member:
     username: str
     difficulty: int = 0
     ready: bool = False
+    connected: bool = False
 
     def serialize(self) -> dict[str, Any]:
         return {
@@ -43,6 +44,7 @@ class Member:
             "username": self.username,
             "difficulty": self.difficulty,
             "ready": self.ready,
+            "connected": self.connected,
         }
 
 
@@ -127,12 +129,19 @@ class MultiplayerHub:
     async def connect(self, room_id: str, user_id: str, socket: WebSocket) -> None:
         async with self.lock:
             self.sockets.setdefault(room_id, {})[user_id] = socket
+            room = self.rooms.get(room_id)
+            if room is not None and user_id in room.members:
+                room.members[user_id].connected = True
 
     async def disconnect(self, room_id: str, user_id: str, socket: WebSocket) -> None:
         async with self.lock:
             sockets = self.sockets.get(room_id)
             if sockets and sockets.get(user_id) is socket:
                 sockets.pop(user_id, None)
+                room = self.rooms.get(room_id)
+                if room is not None and user_id in room.members:
+                    room.members[user_id].connected = False
+                    room.members[user_id].ready = False
 
     async def broadcast(self, room: Room, event: str = "room_snapshot") -> None:
         payload = {"type": event, "serverTimeMs": int(time.time() * 1000), "room": room.serialize()}
@@ -223,3 +232,4 @@ async def multiplayer_socket(websocket: WebSocket, ticket: str, room_id: str):
         pass
     finally:
         await hub.disconnect(room_id, user_id, websocket)
+        await hub.broadcast(room)
